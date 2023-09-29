@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Ensure the script is not being run as root
+if [[ $EUID -eq 0 ]]; then
+    echo "This script should not be run using sudo or as the root user"
+    exit 1
+fi
+
 # Function to validate user input for record number
 validate_number() {
   local num=$1
@@ -36,10 +42,18 @@ else
 fi
 
 # Fetch DNS records
-dns_response=$(curl --silent --request GET \
-  --url "https://api.cloudflare.com/client/v4/zones/${cf_zone_id}/dns_records" \
-  --header "Authorization: Bearer ${cf_api_key_or_token}" \
-  --header "Content-Type: application/json")
+if [ "$api_type" = "t" ]; then
+    dns_response=$(curl --silent --request GET \
+      --url "https://api.cloudflare.com/client/v4/zones/${cf_zone_id}/dns_records" \
+      --header "Authorization: Bearer ${cf_api_key_or_token}" \
+      --header "Content-Type: application/json")
+else
+    dns_response=$(curl --silent --request GET \
+      --url "https://api.cloudflare.com/client/v4/zones/${cf_zone_id}/dns_records" \
+      --header "X-Auth-Email: ${cf_email}" \
+      --header "X-Auth-Key: ${cf_api_key_or_token}" \
+      --header "Content-Type: application/json")
+fi
 
 # Check if the API response is successful and contains DNS records
 if echo "$dns_response" | jq -e '.success == true' >/dev/null && echo "$dns_response" | jq -e '.result | length > 0' >/dev/null; then
@@ -148,10 +162,3 @@ $update_dns_path
 read -p "Enter the update frequency in minutes (default is 60): " update_frequency
 # If the user input is empty, set the default value
 update_frequency=${update_frequency:-60}
-# Calculate the frequency in cron expression
-cron_expression="*/$update_frequency * * * *"
-
-# Add a cron job to execute the script at the specified interval
-(crontab -l 2>/dev/null; echo "$cron_expression /usr/local/bin/update_dns.sh") | crontab -
-
-echo "A cron job has been added to execute /usr/local/bin/update_dns.sh every $update_frequency minutes."
