@@ -6,6 +6,12 @@ if [[ $EUID -eq 0 ]]; then
     exit 1
 fi
 
+# Check if jq is installed
+if ! command -v jq >/dev/null; then
+    echo "jq is not installed. Please install jq to continue."
+    exit 1
+fi
+
 # Function to validate user input for record number
 validate_number() {
   local num=$1
@@ -14,7 +20,14 @@ validate_number() {
 
 # Ask the user for Cloudflare API Token/Key, Email (if API Key is used), and Zone ID
 read -p "Enter your Cloudflare API Token/Key: " cf_api_key_or_token
-read -p "Are you using API Token (t) or API Key (k)? " api_type
+while : ; do
+    read -p "Are you using API Token (t) or API Key (k)? " api_type
+    if [ "$api_type" = "t" ] || [ "$api_type" = "k" ]; then
+        break
+    else
+        echo "Invalid choice. Please select either 't' for Token or 'k' for Key."
+    fi
+done
 if [ "$api_type" = "k" ]; then
   read -p "Enter your Cloudflare Email Address: " cf_email
 fi
@@ -158,7 +171,39 @@ echo "The script 'update_dns.sh' has been created at $update_dns_path and is now
 # Execute the created script
 $update_dns_path
 
-# Ask the user for the update frequency with a default value of every hour
-read -p "Enter the update frequency in minutes (default is 60): " update_frequency
-# If the user input is empty, set the default value
-update_frequency=${update_frequency:-60}
+# Ask the user if they want to use Cloudflare's proxy
+read -p "Do you want to use Cloudflare's proxy (yes or no)? " cf_proxy_choice
+case "$cf_proxy_choice" in
+  [yY]|[yY][eE][sS])
+    cf_proxy_setting=true
+    ;;
+  *)
+    cf_proxy_setting=false
+    ;;
+esac
+
+# Ask the user how often they'd like to have IP updates set to Cloudflare
+while :; do
+  read -p "How often (in minutes) would you like to have IP updates set to Cloudflare? (e.g., 10, 15, 30) " update_frequency
+  if [[ $update_frequency =~ ^[0-9]+$ ]] && (( update_frequency >= 1 )); then
+    break
+  else
+    echo "Invalid input. Please enter a valid number of minutes."
+  fi
+done
+
+# Update the 'update_dns.sh' script to reflect the user's choice on Cloudflare's proxy
+sed -i "s/\"proxied\": true/\"proxied\": $cf_proxy_setting/" $update_dns_path
+
+# Check if the cronjob entry for update_dns.sh already exists
+cron_entry_exists=$(crontab -l 2>/dev/null | grep -F "$update_dns_path")
+
+if [ -z "$cron_entry_exists" ]; then
+  # Add the cronjob
+  (crontab -l 2>/dev/null; echo "*/$update_frequency * * * * $update_dns_path > /dev/null 2>&1") | crontab -
+  echo "Cronjob has been set to run every $update_frequency minutes."
+else
+  # Update the existing cronjob
+  (crontab -l 2>/dev/null | grep -v "$update_dns_path"; echo "*/$update_frequency * * * * $update_dns_path > /dev/null 2>&1") | crontab -
+  echo "Updated cronjob to run every $update_frequency minutes."
+fi
