@@ -41,16 +41,23 @@ if [ "$api_type" = "t" ]; then
     --header "Content-Type: application/json")
 else
   verify_response=$(curl --silent --request GET \
-    --url "https://api.cloudflare.com/client/v4/zones/${cf_zone_id}/dns_records" \
+    --url "https://api.cloudflare.com/client/v4/zones/${cf_zone_id}" \
     --header "X-Auth-Email: ${cf_email}" \
     --header "X-Auth-Key: ${cf_api_key_or_token}" \
     --header "Content-Type: application/json")
 fi
 
+# Handle errors from the curl command
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to verify API Token/Key with Cloudflare."
+    exit 1
+fi
+
 if echo "$verify_response" | jq -e '.success == true' >/dev/null; then
   echo "API Key/Token verification successful!"
 else
-  echo "API Key/Token verification failed. Exiting."
+  error_msg=$(echo "$verify_response" | jq -r '.errors[]?.message? // "API Key/Token verification failed."')
+  echo "$error_msg. Exiting."
   exit 1
 fi
 
@@ -97,6 +104,12 @@ else
   exit 1
 fi
 
+# Handle errors from the curl command
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to verify API Token/Key with Cloudflare."
+    exit 1
+fi
+
 # Create the update_dns.sh script
 update_dns_path="/usr/local/bin/update_dns.sh"
 cat <<EOL > $update_dns_path
@@ -123,6 +136,12 @@ debug_msg() {
 debug_msg "Getting the current public IP address..."
 current_ip=\$(curl -s https://api64.ipify.org?format=json | jq -r .ip)
 
+# Error handling for curl
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to get the current IP address."
+    exit 1
+fi
+
 # Update the DNS record with the new IP address
 debug_msg "Updating DNS record with new IP address..."
 update_dns_record() {
@@ -135,7 +154,7 @@ update_dns_record() {
         \"type\": \"A\",
         \"name\": \"\${cf_record_name}\",
         \"content\": \"\${current_ip}\",
-        \"proxied\": true,
+        \"proxied\": $cf_proxy_setting,
         \"ttl\": 3600
       }"
   else
@@ -148,7 +167,7 @@ update_dns_record() {
         \"type\": \"A\",
         \"name\": \"\${cf_record_name}\",
         \"content\": \"\${current_ip}\",
-        \"proxied\": true,
+        \"proxied\": $cf_proxy_setting,
         \"ttl\": 3600
       }"
   fi
@@ -162,6 +181,7 @@ else
 fi
 
 EOL
+
 
 # Make the script executable
 chmod +x $update_dns_path
