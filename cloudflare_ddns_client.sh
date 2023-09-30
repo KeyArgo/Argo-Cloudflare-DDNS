@@ -33,34 +33,6 @@ if [ "$api_type" = "k" ]; then
 fi
 read -p "Enter your Cloudflare Zone ID: " cf_zone_id
 
-# Verify the provided API Token/Key
-if [ "$api_type" = "t" ]; then
-  verify_response=$(curl --silent --request GET \
-    --url "https://api.cloudflare.com/client/v4/user/tokens/verify" \
-    --header "Authorization: Bearer ${cf_api_key_or_token}" \
-    --header "Content-Type: application/json")
-else
-  verify_response=$(curl --silent --request GET \
-    --url "https://api.cloudflare.com/client/v4/zones/${cf_zone_id}" \
-    --header "X-Auth-Email: ${cf_email}" \
-    --header "X-Auth-Key: ${cf_api_key_or_token}" \
-    --header "Content-Type: application/json")
-fi
-
-# Handle errors from the curl command
-if [ $? -ne 0 ]; then
-    echo "Error: Failed to verify API Token/Key with Cloudflare."
-    exit 1
-fi
-
-if echo "$verify_response" | jq -e '.success == true' >/dev/null; then
-  echo "API Key/Token verification successful!"
-else
-  error_msg=$(echo "$verify_response" | jq -r '.errors[]?.message? // "API Key/Token verification failed."')
-  echo "$error_msg. Exiting."
-  exit 1
-fi
-
 # Fetch DNS records
 if [ "$api_type" = "t" ]; then
     dns_response=$(curl --silent --request GET \
@@ -86,7 +58,7 @@ if echo "$dns_response" | jq -e '.success == true' >/dev/null && echo "$dns_resp
     echo "$index: $name"
     index=$((index + 1))
   done
-  
+
   while : ; do
     read -p "Enter the record number you want to update: " record_number
     if validate_number "$record_number"; then
@@ -104,11 +76,16 @@ else
   exit 1
 fi
 
-# Handle errors from the curl command
-if [ $? -ne 0 ]; then
-    echo "Error: Failed to verify API Token/Key with Cloudflare."
-    exit 1
-fi
+# Ask the user if they want to use Cloudflare's proxy BEFORE creating the update_dns.sh script
+read -p "Do you want to use Cloudflare's proxy (yes or no)? " cf_proxy_choice
+case "$cf_proxy_choice" in
+  [yY]|[yY][eE][sS])
+    cf_proxy_setting=true
+    ;;
+  *)
+    cf_proxy_setting=false
+    ;;
+esac
 
 # Create the update_dns.sh script
 update_dns_path="/usr/local/bin/update_dns.sh"
@@ -136,14 +113,6 @@ debug_msg() {
 debug_msg "Getting the current public IP address..."
 current_ip=\$(curl -s https://api64.ipify.org?format=json | jq -r .ip)
 
-# Error handling for curl
-if [ $? -ne 0 ]; then
-    echo "Error: Failed to get the current IP address."
-    exit 1
-fi
-
-# Update the DNS record with the new IP address
-debug_msg "Updating DNS record with new IP address..."
 update_dns_record() {
   if [ "$api_type" = "t" ]; then
     curl --request PUT \
@@ -171,17 +140,18 @@ update_dns_record() {
         \"ttl\": 3600
       }"
   fi
+
+  if [ -n \"\${current_ip}\" ]; then
+    echo "DNS record updated successfully."
+  else
+    echo "Failed to obtain the current IP address."
+  fi
 }
 
-if [ -n "\$current_ip" ]; then
-  update_dns_record
-  echo "DNS record updated successfully."
-else
-  echo "Failed to obtain the current IP address."
-fi
+# Call the update_dns_record function
+update_dns_record
 
 EOL
-
 
 # Make the script executable
 chmod +x $update_dns_path
@@ -190,17 +160,6 @@ echo "The script 'update_dns.sh' has been created at $update_dns_path and is now
 
 # Execute the created script
 $update_dns_path
-
-# Ask the user if they want to use Cloudflare's proxy
-read -p "Do you want to use Cloudflare's proxy (yes or no)? " cf_proxy_choice
-case "$cf_proxy_choice" in
-  [yY]|[yY][eE][sS])
-    cf_proxy_setting=true
-    ;;
-  *)
-    cf_proxy_setting=false
-    ;;
-esac
 
 # Ask the user how often they'd like to have IP updates set to Cloudflare
 while :; do
@@ -212,9 +171,6 @@ while :; do
   fi
 done
 
-# Update the 'update_dns.sh' script to reflect the user's choice on Cloudflare's proxy
-sed -i "s/\"proxied\": true/\"proxied\": $cf_proxy_setting/" $update_dns_path
-
 # Check if the cronjob entry for update_dns.sh already exists
 cron_entry_exists=$(crontab -l 2>/dev/null | grep -F "$update_dns_path")
 
@@ -222,6 +178,7 @@ if [ -z "$cron_entry_exists" ]; then
   # Add the cronjob
   (crontab -l 2>/dev/null; echo "*/$update_frequency * * * * $update_dns_path > /dev/null 2>&1") | crontab -
   echo "Cronjob has been set to run every $update_frequency minutes."
+
 else
   # Update the existing cronjob
   (crontab -l 2>/dev/null | grep -v "$update_dns_path"; echo "*/$update_frequency * * * * $update_dns_path > /dev/null 2>&1") | crontab -
