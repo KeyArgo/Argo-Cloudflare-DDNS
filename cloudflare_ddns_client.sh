@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Ensure the script is not being run as root
-if [[ $EUID -eq 0 ]]; then
-    echo "This script should not be run using sudo or as the root user"
+# Check if the script is being run with sudo
+if [[ $EUID -ne 0 ]]; then
+    echo "Please run this script with sudo."
     exit 1
 fi
 
