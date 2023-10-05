@@ -8,8 +8,24 @@ fi
 
 # Check if jq is installed
 if ! command -v jq >/dev/null; then
-    echo "jq is not installed. Please install jq to continue."
-    exit 1
+    echo "jq is not installed. Attempting to install..."
+    # Determine the package manager and install jq
+    if command -v apt-get >/dev/null; then
+        sudo apt-get update
+        sudo apt-get install -y jq
+    elif command -v yum >/dev/null; then
+        sudo yum install -y jq
+    elif command -v dnf >/dev/null; then
+        sudo dnf install -y jq
+    else
+        echo "Could not determine package manager. Please install jq manually."
+        exit 1
+    fi
+    # Verify if jq is installed after the attempt
+    if ! command -v jq >/dev/null; then
+        echo "Failed to install jq. Please install it manually and run the script again."
+        exit 1
+    fi
 fi
 
 # Function to validate user input for record number
