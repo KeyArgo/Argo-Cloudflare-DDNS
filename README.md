@@ -1,4 +1,4 @@
-# Cloudflare DDNS Client
+# Argo Cloudflare DDNS
 
 Automate the updating of a DNS record on Cloudflare with your machine's current public IP. This script serves as a custom DDNS client for Cloudflare.
 
