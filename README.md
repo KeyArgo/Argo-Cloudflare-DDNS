@@ -17,7 +17,6 @@ Automate the updating of a DNS record on Cloudflare with your machine's current 
 ## Prerequisites
 
 * The script requires `sudo` privileges to execute.
-* [`jq`](https://stedolan.github.io/jq/) needs to be installed. It's a lightweight and flexible command-line JSON processor.
 
 ## Getting Started
 
