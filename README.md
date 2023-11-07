@@ -1,6 +1,6 @@
 # Argo Cloudflare DDNS
 
-Automate the updating of a DNS record on Cloudflare with your machine's current public IP. This script serves as a custom DDNS client for Cloudflare.
+Argo Cloudflare DDNS is a Bash script designed to streamline the management of DNS records with Cloudflare's services. It is built to run on a Unix-like operating system and leverages the versatility of shell scripting to automate the process of updating DNS records.
 
 ![Cloudflare Logo](https://www.cloudflare.com/img/cf-facebook-card.png)
 
